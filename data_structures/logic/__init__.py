@@ -1,4 +1,12 @@
+from enum import Flag, auto
 from typing import NamedTuple, List
+
+
+class ColumnConstraint(Flag):
+    NONE = 0
+    PRIMARY_KEY = auto()
+    UNIQUE = auto()
+    NOT_NULL = auto()
 
 
 class Operation:
@@ -410,6 +418,7 @@ class From(NamedTuple):
 class ColumnDefinition(NamedTuple):
     name: str
     type: str
+    constraints: ColumnConstraint
 
 
 class OrderBy(NamedTuple):

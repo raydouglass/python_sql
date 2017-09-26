@@ -1,9 +1,9 @@
-from data_structures.b_tree import BTree
-from typing import NamedTuple, List
-from data_structures.logic import *
-from data_structures.parser import parse
 import itertools
 import logging
+
+from data_structures.b_tree import BTree
+from data_structures.logic import *
+from data_structures.parser import parse
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s')
 logger = logging.getLogger(__name__)
@@ -13,7 +13,20 @@ class Table():
     def __init__(self, create_table: CreateTable):
         self.name = create_table.table.name
         self.column_defs = create_table.columns
-        self.pk_def = self.column_defs[0]
+        self.pk_def = None
+        self.auto_pk = False
+        for cd in self.column_defs:
+            if cd.name == 'rowid' and ColumnConstraint.PRIMARY_KEY not in cd.constraints:
+                raise Exception('Cannot have non-primary key column named rowid')
+            if ColumnConstraint.PRIMARY_KEY in cd.constraints:
+                if self.pk_def is not None:
+                    raise Exception('Multiple Primary keys not supported')
+                self.pk_def = cd
+        if self.pk_def is None:
+            # Create fake PK
+            self.pk_def = ColumnDefinition('rowid', 'int', ColumnConstraint.PRIMARY_KEY)
+            self.column_defs.insert(0, self.pk_def)
+            self.auto_pk = True
         self._pk_index = BTree()
         self._data = []
 
@@ -30,8 +43,11 @@ class Table():
             self._data.append(tuple(row_data))
 
     def direct_insert(self, row):
-        if len(row) != len(self.column_defs):
+        if len(row) != len(self.column_defs) and not self.auto_pk:
             raise Exception('Cannot directly insert row with missing or extra columns.')
+        if self.auto_pk:
+            new_pk = len(self._pk_index)
+            row.insert(0, IntegerLiteral(new_pk))
         row = tuple(x.value for x in row)
         pk = row[0]
         if pk in self._pk_index:
@@ -70,6 +86,10 @@ class Table():
     @property
     def primary_key_ref(self):
         return ColumnReference(self.name, self.primary_key_def.name)
+
+    @property
+    def column_references(self):
+        return [ColumnReference(self.name, col.name) for col in self.column_defs]
 
 
 class Database:
@@ -128,6 +148,24 @@ class Database:
             results.append(tuple(result))
         return results
 
+    def _select_join_rows(self, joined_table: JoinTable, left_table_value):
+        right_table = self._get_table(joined_table.table)
+        right_table_columns = right_table.column_references
+        right_table_column_index = right_table_columns.index(joined_table.right)
+        right_table_column_def = right_table_columns[right_table_column_index]
+        if right_table_column_def.column == right_table.pk_def.name:
+            logger.debug('Using primary key index for join on {}'.format(right_table.name))
+            # Primary key, so we can use the index
+            right_table_row = right_table.get_row_by_pk(left_table_value)
+            if right_table_row is None:
+                yield None
+            else:
+                yield right_table_row
+        else:
+            for right_table_row in right_table.scan():
+                if right_table_row[right_table_column_index] == left_table_value:
+                    yield right_table_row
+
     def _select(self, select: Select):
         from_clause = select.from_clause
         main_table = self._get_table(from_clause.table)
@@ -136,30 +174,29 @@ class Database:
         for row in self._get_rows(main_table, select.where):
             skip_row = False
             for joined_table in from_clause.joins:
-                right_table = self._get_table(joined_table.table)
-                right_table_columns = [ColumnReference(right_table.name, col.name) for col in right_table.column_defs]
+                skip_row = True
                 left_table_column_index = columns.index(joined_table.left)
                 left_table_value = row[left_table_column_index]
-                right_table_column_index = right_table_columns.index(joined_table.right)
-                if right_table_column_index == 0:
-                    logger.debug('Using primary key index for join on {}'.format(right_table.name))
-                    # Primary key, so we can use the index
-                    right_table_row = right_table.get_row_by_pk(left_table_value)
-                    if right_table_row is None:
-                        skip_row = True
-                        break
-                else:
-                    # Need to loop all rows...
-                    pass
-                row += right_table_row
-                columns += right_table_columns
-
-            context = Context(row, columns)
-            if not skip_row and select.where.evaluate(context):
+                right_table = self._get_table(joined_table.table)
+                right_table_columns = right_table.column_references
+                for right_table_row in self._select_join_rows(joined_table, left_table_value):
+                    if right_table_row is not None:
+                        row += right_table_row
+                        columns += right_table_columns
+                        skip_row = False
+                if skip_row:
+                    # Join didn't work, so don't bother with following joins
+                    break
+            if not skip_row:
                 rows.append(row)
 
-        rows = self._sort(rows, columns, select.order_by)
-        return self._trim_to_select(rows, columns, select)
+        results = []
+        for row in rows:
+            context = Context(row, columns)
+            if select.where.evaluate(context):
+                results.append(row)
+        results = self._sort(results, columns, select.order_by)
+        return self._trim_to_select(results, columns, select)
 
     def _get_rows(self, main_table, where_clause):
         if issubclass(type(where_clause), Terminal) and main_table.primary_key_ref in where_clause.columns_used():

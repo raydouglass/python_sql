@@ -245,7 +245,26 @@ def _where(parsed_string: ParsedString) -> Operation:
 def column_definition_consumer(parsed_string: ParsedString) -> ColumnDefinition:
     name = parsed_string.consume_token()
     col_type = parsed_string.consume_token()
-    return ColumnDefinition(name, col_type)
+    flags = ColumnConstraint.NONE
+    while True:
+        next_token = parsed_string.peek_token().lower()
+        if next_token == 'primary':
+            parsed_string.consume_expected('primary')
+            parsed_string.consume_expected('key')
+            flags |= ColumnConstraint.PRIMARY_KEY
+            # flags |= ColumnConstraint.UNIQUE
+            # flags |= ColumnConstraint.NOT_NULL
+        elif next_token == 'unique':
+            parsed_string.consume_expected('unique')
+            flags |= ColumnConstraint.UNIQUE
+        elif next_token == 'not':
+            parsed_string.consume_expected('not')
+            parsed_string.consume_expected('null')
+            flags |= ColumnConstraint.NOT_NULL
+        else:
+            break
+
+    return ColumnDefinition(name, col_type, flags)
 
 
 def _from(parsed_string: ParsedString):
@@ -256,13 +275,17 @@ def _from(parsed_string: ParsedString):
         # Join!
         parsed_string.consume_token()
         joined_table_ref = table_consumer(parsed_string)
-        parsed_string.consume_expected('on')
-        left = column_consumer(parsed_string)
-        parsed_string.consume_expected('=')
-        right = column_consumer(parsed_string)
-        if right.table != joined_table_ref.name:
-            # Always order so the joining table is second
-            left, right = right, left
+        if parsed_string.peek_token().lower() == 'on':
+            parsed_string.consume_expected('on')
+            left = column_consumer(parsed_string)
+            parsed_string.consume_expected('=')
+            right = column_consumer(parsed_string)
+            if right.table != joined_table_ref.name:
+                # Always order so the joining table is second
+                left, right = right, left
+        else:
+            left = None
+            right = None
         joins.append(JoinTable(joined_table_ref, left, right))
     return From(table, joins)
 

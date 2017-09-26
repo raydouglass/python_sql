@@ -1,5 +1,7 @@
 import unittest
+
 from data_structures.database import Database
+from data_structures.logic import *
 
 MAIN_DATA = [
     (1, 10, 'a1'),
@@ -18,7 +20,47 @@ THIRD_DATA = [
 ]
 
 
-class TestDatabase(unittest.TestCase):
+class TestCreateTable(unittest.TestCase):
+    def test_create(self):
+        db = Database()
+        self.assertEqual(0, len(db.tables))
+        db.execute('CREATE TABLE main(id int, cola int, colb str)')
+        self.assertEqual(1, len(db.tables))
+        self.assertEqual(ColumnConstraint.PRIMARY_KEY, db.tables['main'].column_defs[0].constraints)
+        self.assertEqual('rowid', db.tables['main'].column_defs[0].name)
+        self.assertEqual(ColumnConstraint.NONE, db.tables['main'].column_defs[1].constraints)
+
+    def test_primary_key(self):
+        db = Database()
+        db.execute('CREATE TABLE main(id int primary key, cola int, colb str)')
+        self.assertEqual(1, len(db.tables))
+        self.assertNotEqual(ColumnConstraint.NONE, db.tables['main'].column_defs[0].constraints)
+        self.assertTrue(ColumnConstraint.PRIMARY_KEY in db.tables['main'].column_defs[0].constraints)
+
+    def test_unique(self):
+        db = Database()
+        db.execute('CREATE TABLE main(id int unique, cola int, colb str)')
+        self.assertEqual(1, len(db.tables))
+        self.assertNotEqual(ColumnConstraint.NONE, db.tables['main'].column_defs[1].constraints)
+        self.assertTrue(ColumnConstraint.UNIQUE in db.tables['main'].column_defs[1].constraints)
+
+    def test_not_null(self):
+        db = Database()
+        db.execute('CREATE TABLE main(id int NOT NULL, cola int, colb str)')
+        self.assertEqual(1, len(db.tables))
+        self.assertNotEqual(ColumnConstraint.NONE, db.tables['main'].column_defs[1].constraints)
+        self.assertTrue(ColumnConstraint.NOT_NULL in db.tables['main'].column_defs[1].constraints)
+
+    def test_unique_not_null(self):
+        db = Database()
+        db.execute('CREATE TABLE main(id int unique NOT NULL, cola int, colb str)')
+        self.assertEqual(1, len(db.tables))
+        self.assertNotEqual(ColumnConstraint.NONE, db.tables['main'].column_defs[1].constraints)
+        self.assertTrue(ColumnConstraint.NOT_NULL in db.tables['main'].column_defs[1].constraints)
+        self.assertTrue(ColumnConstraint.UNIQUE in db.tables['main'].column_defs[1].constraints)
+
+
+class TestSelect(unittest.TestCase):
     def setUp(self):
         self.db = Database()
         self.db.execute('CREATE TABLE main(id int, cola int, colb str)')
@@ -105,9 +147,20 @@ class TestDatabase(unittest.TestCase):
         self.assert_select(query, expected)
 
         query = """
-                        select main.id, main.cola, main.colb, other.id, other.data, third.id, third.data
-                        FROM main
-                          JOIN other ON main.id=other.id
-                          JOIN third ON other.id=third.id
-                        """
+                select main.id, main.cola, main.colb, other.id, other.data, third.id, third.data
+                FROM main
+                  JOIN other ON main.id=other.id
+                  JOIN third ON other.id=third.id
+                """
+        self.assert_select(query, expected)
+
+    def test_cross_join(self):
+        expected = []
+        for md in MAIN_DATA:
+            for other in OTHER_DATA:
+                expected.append(md + other)
+        query = """
+                  select main.id, main.cola, main.colb, other.id, other.data
+                  FROM main
+                  JOIN other"""
         self.assert_select(query, expected)
