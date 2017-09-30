@@ -15,6 +15,7 @@ class Table():
         self.column_defs = create_table.columns
         self.pk_def = None
         self.auto_pk = False
+        self._unique_indexes = {}
         for cd in self.column_defs:
             if cd.name == 'rowid' and ColumnConstraint.PRIMARY_KEY not in cd.constraints:
                 raise Exception('Cannot have non-primary key column named rowid')
@@ -22,6 +23,8 @@ class Table():
                 if self.pk_def is not None:
                     raise Exception('Multiple Primary keys not supported')
                 self.pk_def = cd
+            if ColumnConstraint.UNIQUE in cd.constraints:
+                self._unique_indexes[cd] = BTree()
         if self.pk_def is None:
             # Create fake PK
             self.pk_def = ColumnDefinition('rowid', 'int', ColumnConstraint.PRIMARY_KEY)
@@ -173,22 +176,27 @@ class Database:
         rows = []
         for row in self._get_rows(main_table, select.where):
             skip_row = False
+            temp_rows = [row]
             for joined_table in from_clause.joins:
-                skip_row = True
-                left_table_column_index = columns.index(joined_table.left)
-                left_table_value = row[left_table_column_index]
+                joined_rows = []
                 right_table = self._get_table(joined_table.table)
                 right_table_columns = right_table.column_references
-                for right_table_row in self._select_join_rows(joined_table, left_table_value):
-                    if right_table_row is not None:
-                        row += right_table_row
-                        columns += right_table_columns
-                        skip_row = False
-                if skip_row:
-                    # Join didn't work, so don't bother with following joins
-                    break
-            if not skip_row:
-                rows.append(row)
+                columns += right_table_columns
+                left_table_column_index = columns.index(joined_table.left) if joined_table.left is not None else None
+                for curr_row in temp_rows:
+                    if left_table_column_index is not None:
+                        left_table_value = curr_row[left_table_column_index]
+                        gen = self._select_join_rows(joined_table, left_table_value)
+                    else:
+                        # cross join
+                        gen = right_table.scan()
+                    for right_table_row in gen:
+                        if right_table_row is not None:
+                            new_row = curr_row + right_table_row
+                            joined_rows.append(new_row)
+                temp_rows = joined_rows
+            for r in temp_rows:
+                rows.append(r)
 
         results = []
         for row in rows:
