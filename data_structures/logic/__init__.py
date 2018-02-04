@@ -1,5 +1,5 @@
 from enum import Flag, auto
-from typing import NamedTuple, List
+from typing import NamedTuple, List, Dict, Any
 
 
 class ColumnConstraint(Flag):
@@ -29,13 +29,18 @@ class NotTerminal():
     def is_terminal(self):
         return False
 
+class Literal:
+    def simplify(self):
+        return self
 
-class TrueOp(Operation):
+class TrueOp(Operation, Literal):
+    value = True
     def evaluate(self, context):
         return True
 
 
-class FalseOp(Operation):
+class FalseOp(Operation, Literal):
+    value = False
     def evaluate(self, context):
         return False
 
@@ -181,8 +186,8 @@ class Equals(Operation, Terminal):
                 return TrueOp
             else:
                 return FalseOp
-        if type(self.left) == ColumnReference and type(self.right) == ColumnReference:
-            raise Exception('Join in where clauses are not supported: {}'.format(self))
+        # if type(self.left) == ColumnReference and type(self.right) == ColumnReference and self.left.table!=self.right.table:
+        #     raise Exception('Join in where clauses are not supported: {}'.format(self))
         if issubclass(type(self.left), Literal):
             # Left column should be non-literal
             self.left, self.right = self.right, self.left
@@ -356,11 +361,6 @@ class LessThanEquals(Operation, Terminal):
         return left <= right
 
 
-class Literal:
-    def simplify(self):
-        return self
-
-
 class IntegerLiteral(Literal):
     def __init__(self, value: int):
         self.value = value
@@ -430,6 +430,30 @@ class OrderBy(NamedTuple):
             return ' ORDER BY {}{}'.format(', '.join(map(str, self.columns)), ' DESC' if self.reverse else '')
         else:
             return ''
+
+
+class Update(NamedTuple):
+    table: TableReference
+    columns: Dict[ColumnReference, Any]
+    where: Operation = TrueOp()
+
+    def __repr__(self):
+        sets = ', '.join(['{}={}'.format(k, v) for k, v in self.columns.items()])
+        s = 'UPDATE {} SET {}'.format(self.table, sets)
+        if self.where:
+            s += ' WHERE {}'.format(self.where)
+        return s
+
+class Delete(NamedTuple):
+    table: TableReference
+    where: Operation = TrueOp()
+
+    def __repr__(self):
+        s = 'DELETE FROM {}'.format(self.table)
+        if self.where:
+            s += ' WHERE {}'.format(self.where)
+        return s
+
 
 
 class Select(NamedTuple):

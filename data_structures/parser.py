@@ -6,7 +6,7 @@ from data_structures.logic import *
 ALPHANUMERIC = re.compile('[A-Za-z]')
 DIGIT = re.compile('[0-9]')
 WORD = re.compile('\w')
-WHITESPACE = re.compile('\s')
+WHITESPACE = re.compile(r'[\s\n\r\t]')
 NOT_WHITESPACE = re.compile('[^\s]')
 COMMA = re.compile(',')
 PERIOD = re.compile('\.')
@@ -100,7 +100,7 @@ class ParseException(Exception):
         super(ParseException, self).__init__(message)
 
 
-QUERY_TYPES = ('select', 'insert', 'create')
+QUERY_TYPES = ('select', 'insert', 'create', 'update', 'delete')
 
 
 def query_type(parsed_string: ParsedString):
@@ -232,8 +232,8 @@ def _where(parsed_string: ParsedString) -> Operation:
     else:
         logic = _where_clause(parsed_string)
     options = ('and', 'or')
-    while parsed_string.peek_token() in options:
-        op = parsed_string.consume_token()
+    while parsed_string.peek_token().lower() in options:
+        op = parsed_string.consume_token().lower()
         n = _where(parsed_string)
         if op == 'and':
             logic = And(logic, n)
@@ -302,6 +302,13 @@ def _order_by(parsed_string: ParsedString):
     return OrderBy(order_by, reverse)
 
 
+def _update_expr_consumer(expr: ParsedString):
+    column = column_consumer(expr)
+    expr.consume_expected('=')
+    value = try_consume(expr, LITERALS)
+    return column, value
+
+
 def parse(query):
     parsed_string = ParsedString(query)
     type = query_type(parsed_string)
@@ -343,7 +350,32 @@ def parse(query):
         column_defs = consume_list(parsed_string, column_definition_consumer)
         parsed_string.consume_expected(')')
         return CreateTable(table, column_defs)
-
+    elif type == 'update':
+        table = table_consumer(parsed_string)
+        parsed_string.consume_expected('set')
+        columns = consume_list(parsed_string, _update_expr_consumer)
+        map = {k: v for k, v in columns}
+        token = parsed_string.peek_token(NOT_WHITESPACE).lower()
+        if token == 'where':
+            parsed_string.consume_expected('where')
+            where_clause = _where(parsed_string).simplify()
+        elif token:
+            raise ParseException(expected='where', actual=token, index=parsed_string.index)
+        else:
+            where_clause = None
+        return Update(table, map, where_clause)
+    elif type == 'delete':
+        parsed_string.consume_expected('from')
+        table = table_consumer(parsed_string)
+        token = parsed_string.peek_token(NOT_WHITESPACE).lower()
+        if token == 'where':
+            parsed_string.consume_expected('where')
+            where_clause = _where(parsed_string).simplify()
+        elif token:
+            raise ParseException(expected='where', actual=token, index=parsed_string.index)
+        else:
+            where_clause = None
+        return Delete(table, where_clause)
 
 if __name__ == '__main__':
     query = 'select table.cola, table.col_b2 from table where a.c = 3 and (a.b = 1 or a.b = 2)'
@@ -351,5 +383,13 @@ if __name__ == '__main__':
     print(result)
 
     query = "insert into table values('test', 123)"
+    result = parse(query)
+    print(result)
+
+    query = "update table set table.column='test', table.cola=table.cola where table.cola = 1"
+    result = parse(query)
+    print(result)
+
+    query = 'delete from table where table.cola != 1'
     result = parse(query)
     print(result)

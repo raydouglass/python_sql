@@ -95,12 +95,24 @@ class TestSelect(unittest.TestCase):
         self.assert_select('SELECT main.id, main.cola, main.colb FROM main where main.id = 1 or main.id=2',
                            list(MAIN_DATA[0:2]))
 
+    def test_where_multi_line(self):
+        self.assert_select("""
+        SELECT main.id, main.cola, main.colb
+        FROM main
+        WHERE main.id = 1
+          OR main.id = 2
+        """, list(MAIN_DATA[0:2]))
+
     def test_where_order(self):
         self.assert_select('SELECT main.id, main.cola, main.colb FROM main where main.id=1 order by main.id',
                            [MAIN_DATA[0]])
         self.assert_select(
             'SELECT main.id, main.cola, main.colb FROM main where main.id=1 or main.id=2 order by main.id desc',
             list(reversed(MAIN_DATA[0:2])))
+
+    def test_where_column_compare(self):
+        self.assert_select('SELECT main.id, main.cola, main.colb FROM main where main.id != main.cola', MAIN_DATA)
+        self.assert_select('SELECT main.id, main.cola, main.colb FROM main where main.id = main.cola', [])
 
     def test_join(self):
         expected = [
@@ -164,3 +176,56 @@ class TestSelect(unittest.TestCase):
                   FROM main
                   JOIN other"""
         self.assert_select(query, expected)
+
+    def test_join_in_where(self):
+        expected = [
+            MAIN_DATA[0] + OTHER_DATA[0],
+            MAIN_DATA[1] + OTHER_DATA[1],
+        ]
+        query = """
+        select main.id, main.cola, main.colb, other.id, other.data
+        FROM main
+          JOIN other
+        WHERE main.id=other.id
+        """
+        self.assert_select(query, expected)
+
+    def test_join_in_where_filter(self):
+        expected = [
+            MAIN_DATA[0] + OTHER_DATA[0]
+        ]
+        query = """
+        select main.id, main.cola, main.colb, other.id, other.data
+        FROM main
+          JOIN other
+        WHERE main.id=other.id
+          AND main.id=1
+        """
+        self.assert_select(query, expected)
+
+
+class TestUpdate(unittest.TestCase):
+    def setUp(self):
+        self.db = Database()
+        self.db.execute('CREATE TABLE main(id int, cola int, colb str)')
+        for d in MAIN_DATA:
+            self.db.execute("INSERT INTO main VALUES({}, {}, '{}')".format(*d))
+
+    def assert_select(self, query, expected):
+        rows = self.db.execute(query)
+        self.assertEqual(expected, rows)
+
+    def test_basic_update(self):
+        count = self.db.execute('UPDATE main SET main.cola=1')
+        self.assertEqual(3, count)
+        self.assert_select('SELECT main.cola FROM main', [(1,), (1,), (1,)])
+
+    def test_update_with_where_pk(self):
+        count = self.db.execute('UPDATE main SET main.cola=1 WHERE main.rowid=0')
+        self.assertEqual(1, count)
+        self.assert_select('SELECT main.cola FROM main', [(1,), (9,), (8,)])
+
+    def test_update_with_where(self):
+        count = self.db.execute('UPDATE main SET main.cola=1 WHERE main.id=1')
+        self.assertEqual(1, count)
+        self.assert_select('SELECT main.cola FROM main', [(1,), (9,), (8,)])

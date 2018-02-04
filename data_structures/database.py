@@ -58,6 +58,10 @@ class Table():
         self._pk_index[pk] = len(self._pk_index)
         self._data.append(row)
 
+    def direct_update(self, row):
+        if len(row) != len(self.column_defs):
+            raise Exception('Cannot directly update with missing or extra columns')
+
     def row_list_to_insert(self, rows):
         new_rows = []
         for row in rows:
@@ -112,8 +116,10 @@ class Database:
         elif cmd_type == CreateTable:
             table_name = command.table.name
             if table_name in self.tables:
-                raise Exception('Cannot create existing table: {}'.format(command.name))
+                raise Exception('Cannot create existing table: {}'.format(table_name))
             self.tables[table_name] = Table(command)
+        elif cmd_type == Update:
+            return self._update(command)
         else:
             raise Exception('Unsupported type: {}'.format(cmd_type))
 
@@ -198,15 +204,18 @@ class Database:
             for r in temp_rows:
                 rows.append(r)
 
-        results = []
-        for row in rows:
-            context = Context(row, columns)
-            if select.where.evaluate(context):
-                results.append(row)
-        results = self._sort(results, columns, select.order_by)
-        return self._trim_to_select(results, columns, select)
+        if select.where:
+            rows = self._filter(rows, select.where, columns)
+        if select.order_by:
+            rows = self._sort(list(rows), columns, select.order_by)
+        return self._trim_to_select(rows, columns, select)
 
-    def _get_rows(self, main_table, where_clause):
+    def _filter(self, rows: List, where, columns: List[ColumnReference]):
+        for row in rows:
+            if where is None or where.evaluate(Context(row, columns)):
+                yield row
+
+    def _get_rows(self, main_table: Table, where_clause):
         if issubclass(type(where_clause), Terminal) and main_table.primary_key_ref in where_clause.columns_used():
             if type(where_clause) == Equals:
                 logging.debug('Can use primary key index for where Equals')
@@ -231,6 +240,51 @@ class Database:
                         return itertools.chain(second_it, toRet)
                 return toRet
         return main_table.scan()
+
+    def _update(self, update: Update):
+        table = self._get_table(update.table)
+        rows = self._get_rows(table, update.where)
+        rows = self._filter(rows, update.where, table.column_references)
+        columns = [ColumnReference(table.name, col.name) for col in table.column_defs]
+        count = 0
+        for row in rows:
+            row_data = {}
+            for i, col_def in enumerate(table.column_defs):
+                col_ref = ColumnReference(table.name, col_def.name)
+                if col_ref in update.columns:
+                    context = Context(row, columns)
+                    new_value = context.evaluate(update.columns[col_ref])
+                    row_data[col_def.name] = new_value
+                else:
+                    row_data[col_def.name] = row[i]
+            table.insert(row_data)
+            count += 1
+        return count
+
+        # indexes = {}
+        # for target_column, value in update.columns.items():
+        #     if target_column.table and target_column.table != table.name:
+        #         raise Exception('Cannot update different tables. Update table={}, column={}'
+        #                         .format(table.name, target_column.table))
+        #     found = False
+        #     for i, col_def in enumerate(table.column_defs):
+        #         if col_def.name == target_column.column:
+        #             indexes[i] = value
+        #             found = True
+        #             break
+        #     if not found:
+        #         raise Exception('No column named {} found in {}.'.format(target_column.column, table.name))
+        # count = 0
+        #
+        # for row in rows:
+        #     row = list(row)
+        #     for i, value in indexes.items():
+        #         context = Context(row, columns)
+        #         new_value = context.evaluate(value)
+        #         row[i] = new_value
+        #     table.direct_insert(tuple(row))
+        #     count += 1
+        # return count
 
 
 if __name__ == '__main__':

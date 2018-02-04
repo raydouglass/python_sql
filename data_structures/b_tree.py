@@ -13,6 +13,17 @@ def set_siblings(children):
 
 
 # https://www.cs.usfca.edu/~galles/visualization/BPlusTree.html
+# http://www.cburch.com/cs/340/reading/btree/
+# B+-tree maintains the following invariants:
+# * Every node has one more references than it has keys.
+# * All leaves are at the same distance from the root.
+# * For every non-leaf node N with k being the number of keys in N: all keys in the first child's subtree are less than N's first key; and all keys in the ith child's subtree (2 ≤ i ≤ k) are between the (i − 1)th key of n and the ith key of n.
+# * The root has at least two children.
+# * Every non-leaf, non-root node has at least floor(d / 2) children.
+# * Each leaf contains at least floor(d / 2) keys.
+# * Every key from the table appears in a leaf, in left-to-right sorted order.
+
+
 @total_ordering
 class Node:
     def has_key_space(self):
@@ -31,19 +42,6 @@ class Node:
         for child in self.children:
             strs.extend(child.print(level + 1))
         return strs
-
-
-class RootNode(Node):
-    def __init__(self, degree):
-        self.degree = degree
-        self.children = []
-        self.keys = []
-
-    def insert(self, key, value):
-        if self.has_value_space():
-            pass
-        else:
-            pass
 
 
 class InteriorNode(Node):
@@ -325,6 +323,9 @@ if __name__ == '__main__':
     print(tree[12])
     print(12 in tree)
     print(100 in tree)
+    print(tree[4])
+    tree[4] = 17
+    print(tree[4])
 
     print('Slice')
     print(list(tree[3:9]))
