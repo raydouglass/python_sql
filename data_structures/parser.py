@@ -324,7 +324,7 @@ def parse(query):
             where_clause = _where(parsed_string).simplify()
             token = parsed_string.peek_token(NOT_WHITESPACE).lower()
             got_where = True
-        order_by = OrderBy()
+        order_by = None
         if token == 'order':
             order_by = _order_by(parsed_string)
         elif token is not None and token != '':

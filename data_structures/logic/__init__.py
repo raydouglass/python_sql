@@ -1,6 +1,6 @@
 from enum import Flag, auto
-from typing import NamedTuple, List, Dict, Any
-
+from typing import List, Dict, Any
+from collections import namedtuple
 
 class ColumnConstraint(Flag):
     NONE = 0
@@ -377,9 +377,9 @@ class StringLiteral(Literal):
         return "'{}'".format(self.value)
 
 
-class ColumnReference(NamedTuple):
-    table: str
-    column: str
+class ColumnReference(namedtuple('ColumnReference', ['table', 'column'])):
+    # table: str
+    # column: str
 
     def __repr__(self):
         return '{}.{}'.format(self.table, self.column)
@@ -388,25 +388,25 @@ class ColumnReference(NamedTuple):
         return self
 
 
-class TableReference(NamedTuple):
-    name: str
+class TableReference(namedtuple('TableReference',['name'])):
+    # name: str
 
     def __repr__(self):
         return self.name
 
 
-class JoinTable(NamedTuple):
-    table: TableReference
-    left: ColumnReference
-    right: ColumnReference
+class JoinTable(namedtuple('JoinTable', ['table','left','right'])):
+    # table: TableReference
+    # left: ColumnReference
+    # right: ColumnReference
 
     def __repr__(self):
         return 'JOIN {} ON {} = {}'.format(self.table, self.left, self.right)
 
 
-class From(NamedTuple):
-    table: TableReference
-    joins: List[JoinTable]
+class From(namedtuple('From',['table','joins'])):
+    # table: TableReference
+    # joins: List[JoinTable]
 
     def __repr__(self):
         if len(self.joins) > 0:
@@ -415,15 +415,15 @@ class From(NamedTuple):
             return 'FROM {}'.format(self.table)
 
 
-class ColumnDefinition(NamedTuple):
-    name: str
-    type: str
-    constraints: ColumnConstraint
+class ColumnDefinition(namedtuple('ColumnDefinition',['name','type','constraints'])):
+    # name: str
+    # type: str
+    # constraints: ColumnConstraint
+    pass
 
-
-class OrderBy(NamedTuple):
-    columns: List[ColumnReference] = []
-    reverse: bool = False
+class OrderBy(namedtuple('OrderBy',['columns','reverse'])):
+    # columns: List[ColumnReference] = []
+    # reverse: bool = False
 
     def __repr__(self):
         if len(self.columns) > 0:
@@ -432,10 +432,10 @@ class OrderBy(NamedTuple):
             return ''
 
 
-class Update(NamedTuple):
-    table: TableReference
-    columns: Dict[ColumnReference, Any]
-    where: Operation = TrueOp()
+class Update(namedtuple('Update',['table','columns','where'])):
+    # table: TableReference
+    # columns: Dict[ColumnReference, Any]
+    # where: Operation = TrueOp()
 
     def __repr__(self):
         sets = ', '.join(['{}={}'.format(k, v) for k, v in self.columns.items()])
@@ -444,9 +444,9 @@ class Update(NamedTuple):
             s += ' WHERE {}'.format(self.where)
         return s
 
-class Delete(NamedTuple):
-    table: TableReference
-    where: Operation = TrueOp()
+class Delete(namedtuple('Delete',['table','where'])):
+    # table: TableReference
+    # where: Operation = TrueOp()
 
     def __repr__(self):
         s = 'DELETE FROM {}'.format(self.table)
@@ -456,11 +456,11 @@ class Delete(NamedTuple):
 
 
 
-class Select(NamedTuple):
-    columns: List[ColumnReference]
-    from_clause: From
-    where: Operation = TrueOp()
-    order_by: OrderBy = OrderBy()
+class Select(namedtuple('Select',['columns', 'from_clause', 'where','order_by'])):
+    # columns: List[ColumnReference]
+    # from_clause: From
+    # where: Operation = TrueOp()
+    # order_by: OrderBy = OrderBy()
 
     def __repr__(self):
         s = 'SELECT {} {}'.format(','.join(map(str, self.columns)), self.from_clause)
@@ -470,18 +470,18 @@ class Select(NamedTuple):
         return s
 
 
-class Insert(NamedTuple):
-    table: TableReference
-    values: List
+class Insert(namedtuple('Insert',['table','values'])):
+    # table: TableReference
+    # values: List
 
     def __repr__(self):
         return 'INSERT INTO {} VALUES({})'.format(self.table, ', '.join(map(str, self.values)))
 
 
-class CreateTable(NamedTuple):
-    table: TableReference
-    columns: List[ColumnDefinition]
-
+class CreateTable(namedtuple('CreateTable',['table','columns'])):
+    # table: TableReference
+    # columns: List[ColumnDefinition]
+    pass
 
 class Context:
     def __init__(self, row, columns: List[ColumnReference]):
