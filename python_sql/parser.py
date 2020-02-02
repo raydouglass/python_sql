@@ -45,13 +45,15 @@ class ParsedString():
     def peek_token(self, pattern=ALPHANUMERIC, skip_whitespace=True):
         if skip_whitespace:
             self.skip_whitespace()
-        r = itertools.takewhile(lambda x: pattern.match(x), self.string[self.index:])
+        r = itertools.takewhile(lambda x: pattern.match(x),
+                                self.string[self.index:])
         return ''.join(r)
 
     def consume_token(self, pattern=ALPHANUMERIC, skip_whitespace=True):
         if skip_whitespace:
             self.skip_whitespace()
-        r = itertools.takewhile(lambda x: pattern.match(x), self.string[self.index:])
+        r = itertools.takewhile(lambda x: pattern.match(x),
+                                self.string[self.index:])
         r = ''.join(r)
         self.index += len(r)
         self.previous_token = r
@@ -59,7 +61,8 @@ class ParsedString():
             return self.raise_exception(expected=pattern)
         return r
 
-    def consume_expected(self, expected, match_case=False, skip_whitespace=True):
+    def consume_expected(self, expected, match_case=False,
+                         skip_whitespace=True):
         if skip_whitespace:
             self.skip_whitespace()
         toRet = self.string[self.index:self.index + len(expected)]
@@ -75,7 +78,8 @@ class ParsedString():
         return toRet
 
     def skip_whitespace(self):
-        r = itertools.takewhile(lambda x: WHITESPACE.match(x), self.string[self.index:])
+        r = itertools.takewhile(lambda x: WHITESPACE.match(x),
+                                self.string[self.index:])
         r = ''.join(r)
         self.index += len(r)
 
@@ -92,11 +96,15 @@ class ParsedString():
 class ParseException(Exception):
     def __init__(self, expected, actual, index=-1):
         if type(expected) == str:
-            message = 'Expected "{}" but got "{}" at index {}'.format(expected, actual, index)
+            message = 'Expected "{}" but got "{}" at index {}'.format(expected,
+                                                                      actual,
+                                                                      index)
         elif type(expected) == tuple or type(expected) == list:
-            message = 'Expected one of "{}" but got "{}" at index {}'.format(expected, actual, index)
+            message = 'Expected one of "{}" but got "{}" at index {}'.format(
+                expected, actual, index)
         else:
-            message = 'Expected matching regex "{}" but got "{}" at index {}'.format(expected.pattern, actual, index)
+            message = 'Expected matching regex "{}" but got "{}" at index {}'.format(
+                expected.pattern, actual, index)
         super(ParseException, self).__init__(message)
 
 
@@ -129,7 +137,7 @@ def column_consumer(col: ParsedString):
         col.consume_expected('AS')
         as_name = col.consume_token(WORD)
     else:
-        as_name=None
+        as_name = None
     return ColumnReference(table, name, as_name)
 
 
@@ -167,7 +175,8 @@ def try_consume(parsed_string: ParsedString, potentials):
                     return r
             except ParseException:
                 parsed_string.try_revert()
-        raise ParseException(expected=potentials, actual=None, index=parsed_string.index)
+        raise ParseException(expected=potentials, actual=None,
+                             index=parsed_string.index)
     finally:
         parsed_string.try_end()
 
@@ -211,7 +220,8 @@ def _where_clause(parsed_string: ParsedString) -> Operation:
         if operation not in OPERATIONS2:
             operation = parsed_string.peek(1)
             if operation not in OPERATIONS:
-                parsed_string.raise_exception(expected=list(ALL_OPERATIONS.keys()), actual=operation)
+                parsed_string.raise_exception(
+                    expected=list(ALL_OPERATIONS.keys()), actual=operation)
         parsed_string.consume_expected(operation)
         if operation == 'in':
             parsed_string.consume_expected('(')
@@ -247,9 +257,20 @@ def _where(parsed_string: ParsedString) -> Operation:
     return logic
 
 
+COLUMN_TYPES = ('int', 'double', 'varchar')
+
+
 def column_definition_consumer(parsed_string: ParsedString) -> ColumnDefinition:
     name = parsed_string.consume_token()
-    col_type = parsed_string.consume_token()
+    col_type = parsed_string.consume_token().lower()
+    if col_type not in COLUMN_TYPES:
+        parsed_string.raise_exception(COLUMN_TYPES, col_type)
+    if col_type == 'varchar':
+        parsed_string.consume_expected('(')
+        size = int(parsed_string.consume_token(pattern=DIGIT))
+        parsed_string.consume_expected(')')
+    else:
+        size = 8
     flags = ColumnConstraint.NONE
     while True:
         next_token = parsed_string.peek_token().lower()
@@ -259,6 +280,8 @@ def column_definition_consumer(parsed_string: ParsedString) -> ColumnDefinition:
             flags |= ColumnConstraint.PRIMARY_KEY
             # flags |= ColumnConstraint.UNIQUE
             # flags |= ColumnConstraint.NOT_NULL
+            if col_type!='int':
+                raise Exception('Primary key must be an int')
         elif next_token == 'unique':
             parsed_string.consume_expected('unique')
             flags |= ColumnConstraint.UNIQUE
@@ -269,7 +292,7 @@ def column_definition_consumer(parsed_string: ParsedString) -> ColumnDefinition:
         else:
             break
 
-    return ColumnDefinition(name, col_type, flags)
+    return ColumnDefinition(name, col_type, size, flags)
 
 
 def _from(parsed_string: ParsedString):
@@ -365,7 +388,8 @@ def parse(query):
             parsed_string.consume_expected('where')
             where_clause = _where(parsed_string).simplify()
         elif token:
-            raise ParseException(expected='where', actual=token, index=parsed_string.index)
+            raise ParseException(expected='where', actual=token,
+                                 index=parsed_string.index)
         else:
             where_clause = None
         return Update(table, map, where_clause)
@@ -377,10 +401,12 @@ def parse(query):
             parsed_string.consume_expected('where')
             where_clause = _where(parsed_string).simplify()
         elif token:
-            raise ParseException(expected='where', actual=token, index=parsed_string.index)
+            raise ParseException(expected='where', actual=token,
+                                 index=parsed_string.index)
         else:
             where_clause = None
         return Delete(table, where_clause)
+
 
 if __name__ == '__main__':
     query = 'select table.cola, table.col_b2 from table where a.c = 3 and (a.b = 1 or a.b = 2)'

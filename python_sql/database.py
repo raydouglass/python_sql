@@ -24,15 +24,62 @@ class Row():
 
     def __eq__(self, other):
         if isinstance(other, Row):
-            return self.data == other.data and self.columns==other.columns
+            return self.data == other.data and self.columns == other.columns
         elif isinstance(other, tuple):
             return self.data == other
         else:
             raise Exception('Can only compare Row or tuple')
 
 
+class StorageDriver:
+
+    def __init__(self):
+        self.tables = {}
+
+    def add_table(self, table):
+        self.tables[table.name] = table.column_defs
+
+    def write_row(self, table_name, pk, row_data):
+        pass
+
+    def append_row(self, table_name, row_data):
+        pass
+
+    def read_row(self, table_name, pk):
+        pass
+
+    def scan(self, table_name, start_pk=None, stop_pk=None):
+        pass
+
+
+class MemoryStorageDriver(StorageDriver):
+
+    def __init__(self):
+        super().__init__()
+        self._data = {}
+
+    def add_table(self, table):
+        super().add_table(table)
+        self._data[table.name] = []
+
+    def write_row(self, table_name, pk, row_data):
+        self._data[table_name][pk] = row_data
+
+    def append_row(self, table_name, row_data):
+        self._data[table_name].append(row_data)
+
+    def read_row(self, table_name, pk):
+        return self._data[table_name][pk]
+
+    def scan(self, table_name, start_pk=None, stop_pk=None):
+        sp = slice(start_pk, stop_pk)
+        for row in self._data[table_name][sp]:
+            yield row
+
+
 class Table():
-    def __init__(self, create_table: CreateTable):
+    def __init__(self, storage: StorageDriver, create_table: CreateTable):
+        self.storage=storage
         self.name = create_table.table.name
         self.column_defs = create_table.columns
         self.pk_def = None
@@ -50,12 +97,12 @@ class Table():
                 self._unique_indexes[cd] = BTree()
         if self.pk_def is None:
             # Create fake PK
-            self.pk_def = ColumnDefinition('rowid', 'int',
+            self.pk_def = ColumnDefinition('rowid', 'int', 8,
                                            ColumnConstraint.PRIMARY_KEY)
             self.column_defs.insert(0, self.pk_def)
             self.auto_pk = True
         self._pk_index = BTree()
-        self._data = []
+        self.storage.add_table(self)
 
     def insert(self, row):
         row_data = []
@@ -64,10 +111,10 @@ class Table():
         pk = row_data[0]
         if pk in self._pk_index:
             data_index = self._pk_index[pk]
-            self._data[data_index] = row_data
+            self.storage.write_row(self.name, data_index, row_data)
         else:
             self._pk_index[pk] = len(self._pk_index)
-            self._data.append(tuple(row_data))
+            self.storage.append_row(self.name, row_data)
 
     def direct_insert(self, row):
         if len(row) != len(self.column_defs) and not self.auto_pk:
@@ -82,7 +129,7 @@ class Table():
             raise Exception(
                 'Cannot insert duplicate row with Primary Key: {}'.format(pk))
         self._pk_index[pk] = len(self._pk_index)
-        self._data.append(row)
+        self.storage.append_row(self.name, row)
 
     def direct_update(self, row):
         if len(row) != len(self.column_defs):
@@ -106,7 +153,7 @@ class Table():
 
     def get_row_data(self, index):
         logger.debug('Get Row Data - {}: row {}'.format(self.name, index))
-        return self._data[index]
+        return self.storage.read_row(self.name, index)
 
     def scan(self, start=None, stop=None):
         sp = slice(start, stop)
@@ -128,8 +175,9 @@ class Table():
 
 
 class Database:
-    def __init__(self):
+    def __init__(self, storage: StorageDriver=MemoryStorageDriver()):
         self.tables = {}
+        self.storage=storage
 
     def execute(self, command):
         cmd_type = type(command)
@@ -146,7 +194,7 @@ class Database:
             if table_name in self.tables:
                 raise Exception(
                     'Cannot create existing table: {}'.format(table_name))
-            self.tables[table_name] = Table(command)
+            self.tables[table_name] = Table(self.storage, command)
         elif cmd_type == Update:
             return self._update(command)
         else:
@@ -261,16 +309,17 @@ class Database:
                 return (main_table.get_row_by_pk(value.value) for value in
                         where_clause.values)
             elif type(where_clause) in (
-            GreaterThan, GreaterThanEquals) and isinstance(where_clause.right,
-                                                           Literal):
+                    GreaterThan, GreaterThanEquals) and isinstance(
+                where_clause.right,
+                Literal):
                 logging.debug('Can use primary key index for where {}'.format(
                     type(where_clause).__name__))
                 value = where_clause.right.value
                 # Note, in some cases, for GreaterThan, this will have an extra entry, but that will be filtered during where phase
                 return main_table.scan(start=value)
             elif type(where_clause) in (
-            LessThan, LessThanEquals) and isinstance(where_clause.right,
-                                                     Literal):
+                    LessThan, LessThanEquals) and isinstance(where_clause.right,
+                                                             Literal):
                 logging.debug('Can use primary key index for where {}'.format(
                     type(where_clause).__name__))
                 value = where_clause.right.value

@@ -24,7 +24,7 @@ class TestCreateTable(unittest.TestCase):
     def test_create(self):
         db = Database()
         self.assertEqual(0, len(db.tables))
-        db.execute('CREATE TABLE main(id int, cola int, colb str)')
+        db.execute('CREATE TABLE main(id int, cola int, colb varchar(16))')
         self.assertEqual(1, len(db.tables))
         self.assertEqual(ColumnConstraint.PRIMARY_KEY, db.tables['main'].column_defs[0].constraints)
         self.assertEqual('rowid', db.tables['main'].column_defs[0].name)
@@ -32,28 +32,28 @@ class TestCreateTable(unittest.TestCase):
 
     def test_primary_key(self):
         db = Database()
-        db.execute('CREATE TABLE main(id int primary key, cola int, colb str)')
+        db.execute('CREATE TABLE main(id int primary key, cola int, colb varchar(16))')
         self.assertEqual(1, len(db.tables))
         self.assertNotEqual(ColumnConstraint.NONE, db.tables['main'].column_defs[0].constraints)
         self.assertTrue(ColumnConstraint.PRIMARY_KEY in db.tables['main'].column_defs[0].constraints)
 
     def test_unique(self):
         db = Database()
-        db.execute('CREATE TABLE main(id int unique, cola int, colb str)')
+        db.execute('CREATE TABLE main(id int unique, cola int, colb varchar(16))')
         self.assertEqual(1, len(db.tables))
         self.assertNotEqual(ColumnConstraint.NONE, db.tables['main'].column_defs[1].constraints)
         self.assertTrue(ColumnConstraint.UNIQUE in db.tables['main'].column_defs[1].constraints)
 
     def test_not_null(self):
         db = Database()
-        db.execute('CREATE TABLE main(id int NOT NULL, cola int, colb str)')
+        db.execute('CREATE TABLE main(id int NOT NULL, cola int, colb varchar(16))')
         self.assertEqual(1, len(db.tables))
         self.assertNotEqual(ColumnConstraint.NONE, db.tables['main'].column_defs[1].constraints)
         self.assertTrue(ColumnConstraint.NOT_NULL in db.tables['main'].column_defs[1].constraints)
 
     def test_unique_not_null(self):
         db = Database()
-        db.execute('CREATE TABLE main(id int unique NOT NULL, cola int, colb str)')
+        db.execute('CREATE TABLE main(id int unique NOT NULL, cola int, colb varchar(16))')
         self.assertEqual(1, len(db.tables))
         self.assertNotEqual(ColumnConstraint.NONE, db.tables['main'].column_defs[1].constraints)
         self.assertTrue(ColumnConstraint.NOT_NULL in db.tables['main'].column_defs[1].constraints)
@@ -63,15 +63,15 @@ class TestCreateTable(unittest.TestCase):
 class TestSelect(unittest.TestCase):
     def setUp(self):
         self.db = Database()
-        self.db.execute('CREATE TABLE main(id int, cola int, colb str)')
+        self.db.execute('CREATE TABLE main(id int, cola int, colb varchar(16))')
         for d in MAIN_DATA:
             self.db.execute("INSERT INTO main VALUES({}, {}, '{}')".format(*d))
 
-        self.db.execute('CREATE TABLE other(id int, data str)')
+        self.db.execute('CREATE TABLE other(id int, data varchar(16))')
         for d in OTHER_DATA:
             self.db.execute("INSERT INTO other VALUES({}, '{}')".format(*d))
 
-        self.db.execute('CREATE TABLE third(id int, data str)')
+        self.db.execute('CREATE TABLE third(id int, data varchar(16))')
         for d in THIRD_DATA:
             self.db.execute("INSERT INTO third VALUES({}, '{}')".format(*d))
 
@@ -220,7 +220,7 @@ class TestSelect(unittest.TestCase):
 class TestUpdate(unittest.TestCase):
     def setUp(self):
         self.db = Database()
-        self.db.execute('CREATE TABLE main(id int, cola int, colb str)')
+        self.db.execute('CREATE TABLE main(id int, cola int, colb varchar(16))')
         for d in MAIN_DATA:
             self.db.execute("INSERT INTO main VALUES({}, {}, '{}')".format(*d))
 

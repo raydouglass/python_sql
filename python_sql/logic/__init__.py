@@ -445,9 +445,10 @@ class From(namedtuple('From', ['table', 'joins'])):
 
 
 class ColumnDefinition(
-    namedtuple('ColumnDefinition', ['name', 'type', 'constraints'])):
+    namedtuple('ColumnDefinition', ['name', 'type', 'size', 'constraints'])):
     # name: str
     # type: str
+    # size: int
     # constraints: ColumnConstraint
     pass
 
