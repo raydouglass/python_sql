@@ -9,6 +9,28 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s')
 logger = logging.getLogger(__name__)
 
 
+class Row():
+
+    def __init__(self, data, columns):
+        self.data = data if isinstance(data, tuple) else tuple(data)
+        self.columns = [x.reference_name for x in columns]
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            index = key
+        else:
+            index = self.columns.index(key)
+        return self.data[index]
+
+    def __eq__(self, other):
+        if isinstance(other, Row):
+            return self.data == other.data and self.columns==other.columns
+        elif isinstance(other, tuple):
+            return self.data == other
+        else:
+            raise Exception('Can only compare Row or tuple')
+
+
 class Table():
     def __init__(self, create_table: CreateTable):
         self.name = create_table.table.name
@@ -18,7 +40,8 @@ class Table():
         self._unique_indexes = {}
         for cd in self.column_defs:
             if cd.name == 'rowid' and ColumnConstraint.PRIMARY_KEY not in cd.constraints:
-                raise Exception('Cannot have non-primary key column named rowid')
+                raise Exception(
+                    'Cannot have non-primary key column named rowid')
             if ColumnConstraint.PRIMARY_KEY in cd.constraints:
                 if self.pk_def is not None:
                     raise Exception('Multiple Primary keys not supported')
@@ -27,7 +50,8 @@ class Table():
                 self._unique_indexes[cd] = BTree()
         if self.pk_def is None:
             # Create fake PK
-            self.pk_def = ColumnDefinition('rowid', 'int', ColumnConstraint.PRIMARY_KEY)
+            self.pk_def = ColumnDefinition('rowid', 'int',
+                                           ColumnConstraint.PRIMARY_KEY)
             self.column_defs.insert(0, self.pk_def)
             self.auto_pk = True
         self._pk_index = BTree()
@@ -47,20 +71,23 @@ class Table():
 
     def direct_insert(self, row):
         if len(row) != len(self.column_defs) and not self.auto_pk:
-            raise Exception('Cannot directly insert row with missing or extra columns.')
+            raise Exception(
+                'Cannot directly insert row with missing or extra columns.')
         if self.auto_pk:
             new_pk = len(self._pk_index)
             row.insert(0, IntegerLiteral(new_pk))
         row = tuple(x.value for x in row)
         pk = row[0]
         if pk in self._pk_index:
-            raise Exception('Cannot insert duplicate row with Primary Key: {}'.format(pk))
+            raise Exception(
+                'Cannot insert duplicate row with Primary Key: {}'.format(pk))
         self._pk_index[pk] = len(self._pk_index)
         self._data.append(row)
 
     def direct_update(self, row):
         if len(row) != len(self.column_defs):
-            raise Exception('Cannot directly update with missing or extra columns')
+            raise Exception(
+                'Cannot directly update with missing or extra columns')
 
     def row_list_to_insert(self, rows):
         new_rows = []
@@ -92,11 +119,12 @@ class Table():
 
     @property
     def primary_key_ref(self):
-        return ColumnReference(self.name, self.primary_key_def.name)
+        return ColumnReference(self.name, self.primary_key_def.name, None)
 
     @property
     def column_references(self):
-        return [ColumnReference(self.name, col.name) for col in self.column_defs]
+        return [ColumnReference(self.name, col.name, None) for col in
+                self.column_defs]
 
 
 class Database:
@@ -116,7 +144,8 @@ class Database:
         elif cmd_type == CreateTable:
             table_name = command.table.name
             if table_name in self.tables:
-                raise Exception('Cannot create existing table: {}'.format(table_name))
+                raise Exception(
+                    'Cannot create existing table: {}'.format(table_name))
             self.tables[table_name] = Table(command)
         elif cmd_type == Update:
             return self._update(command)
@@ -154,7 +183,7 @@ class Database:
             for i, e in enumerate(row):
                 if i in to_retain:
                     result.append(e)
-            results.append(tuple(result))
+            results.append(Row(result, select.columns))
         return results
 
     def _select_join_rows(self, joined_table: JoinTable, left_table_value):
@@ -163,7 +192,8 @@ class Database:
         right_table_column_index = right_table_columns.index(joined_table.right)
         right_table_column_def = right_table_columns[right_table_column_index]
         if right_table_column_def.column == right_table.pk_def.name:
-            logger.debug('Using primary key index for join on {}'.format(right_table.name))
+            logger.debug('Using primary key index for join on {}'.format(
+                right_table.name))
             # Primary key, so we can use the index
             right_table_row = right_table.get_row_by_pk(left_table_value)
             if right_table_row is None:
@@ -172,13 +202,15 @@ class Database:
                 yield right_table_row
         else:
             for right_table_row in right_table.scan():
-                if right_table_row[right_table_column_index] == left_table_value:
+                if right_table_row[
+                    right_table_column_index] == left_table_value:
                     yield right_table_row
 
     def _select(self, select: Select):
         from_clause = select.from_clause
         main_table = self._get_table(from_clause.table)
-        columns = [ColumnReference(main_table.name, col.name) for col in main_table.column_defs]
+        columns = [ColumnReference(main_table.name, col.name, None) for col in
+                   main_table.column_defs]
         rows = []
         for row in self._get_rows(main_table, select.where):
             skip_row = False
@@ -188,11 +220,13 @@ class Database:
                 right_table = self._get_table(joined_table.table)
                 right_table_columns = right_table.column_references
                 columns += right_table_columns
-                left_table_column_index = columns.index(joined_table.left) if joined_table.left is not None else None
+                left_table_column_index = columns.index(
+                    joined_table.left) if joined_table.left is not None else None
                 for curr_row in temp_rows:
                     if left_table_column_index is not None:
                         left_table_value = curr_row[left_table_column_index]
-                        gen = self._select_join_rows(joined_table, left_table_value)
+                        gen = self._select_join_rows(joined_table,
+                                                     left_table_value)
                     else:
                         # cross join
                         gen = right_table.scan()
@@ -216,21 +250,29 @@ class Database:
                 yield row
 
     def _get_rows(self, main_table: Table, where_clause):
-        if issubclass(type(where_clause), Terminal) and main_table.primary_key_ref in where_clause.columns_used():
+        if issubclass(type(where_clause),
+                      Terminal) and main_table.primary_key_ref in where_clause.columns_used():
             if type(where_clause) == Equals:
                 logging.debug('Can use primary key index for where Equals')
                 value = where_clause.right.value
                 return [main_table.get_row_by_pk(value)]
             elif type(where_clause) == InFunc:
                 logging.debug('Can use primary key index for where InFunc')
-                return (main_table.get_row_by_pk(value.value) for value in where_clause.values)
-            elif type(where_clause) in (GreaterThan, GreaterThanEquals) and isinstance(where_clause.right, Literal):
-                logging.debug('Can use primary key index for where {}'.format(type(where_clause).__name__))
+                return (main_table.get_row_by_pk(value.value) for value in
+                        where_clause.values)
+            elif type(where_clause) in (
+            GreaterThan, GreaterThanEquals) and isinstance(where_clause.right,
+                                                           Literal):
+                logging.debug('Can use primary key index for where {}'.format(
+                    type(where_clause).__name__))
                 value = where_clause.right.value
                 # Note, in some cases, for GreaterThan, this will have an extra entry, but that will be filtered during where phase
                 return main_table.scan(start=value)
-            elif type(where_clause) in (LessThan, LessThanEquals) and isinstance(where_clause.right, Literal):
-                logging.debug('Can use primary key index for where {}'.format(type(where_clause).__name__))
+            elif type(where_clause) in (
+            LessThan, LessThanEquals) and isinstance(where_clause.right,
+                                                     Literal):
+                logging.debug('Can use primary key index for where {}'.format(
+                    type(where_clause).__name__))
                 value = where_clause.right.value
                 toRet = iter(main_table.scan(stop=value))
                 if type(where_clause) == LessThanEquals:
@@ -245,12 +287,13 @@ class Database:
         table = self._get_table(update.table)
         rows = self._get_rows(table, update.where)
         rows = self._filter(rows, update.where, table.column_references)
-        columns = [ColumnReference(table.name, col.name) for col in table.column_defs]
+        columns = [ColumnReference(table.name, col.name, None) for col in
+                   table.column_defs]
         count = 0
         for row in rows:
             row_data = {}
             for i, col_def in enumerate(table.column_defs):
-                col_ref = ColumnReference(table.name, col_def.name)
+                col_ref = ColumnReference(table.name, col_def.name, None)
                 if col_ref in update.columns:
                     context = Context(row, columns)
                     new_value = context.evaluate(update.columns[col_ref])

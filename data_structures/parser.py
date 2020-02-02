@@ -125,7 +125,12 @@ def column_consumer(col: ParsedString):
     table = col.consume_token(WORD)
     col.consume_expected('.')
     name = col.consume_token(WORD)
-    return ColumnReference(table, name)
+    if col.peek_token() == 'AS':
+        col.consume_expected('AS')
+        as_name = col.consume_token(WORD)
+    else:
+        as_name=None
+    return ColumnReference(table, name, as_name)
 
 
 def table_consumer(parsed_string: ParsedString):

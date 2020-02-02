@@ -82,6 +82,19 @@ class TestSelect(unittest.TestCase):
     def test_basic(self):
         self.assert_select('SELECT main.id, main.cola, main.colb FROM main', MAIN_DATA)
 
+    def test_row_by_name(self):
+        row = self.db.execute('SELECT main.id, main.cola, main.colb FROM main where main.id = 1')[0]
+        self.assertEqual(MAIN_DATA[0][0], row['main.id'])
+
+    def test_row_by_index(self):
+        row = self.db.execute('SELECT main.id, main.cola, main.colb FROM main where main.id = 1')[0]
+        self.assertEqual(MAIN_DATA[0][0], row[0])
+        self.assertEqual(MAIN_DATA[0][2], row[2])
+
+    def test_row_by_name_as_clause(self):
+        row = self.db.execute('SELECT main.id AS id FROM main where main.id = 1')[0]
+        self.assertEqual(MAIN_DATA[0][0], row['id'])
+
     def test_basic_limited_columns(self):
         self.assert_select('SELECT main.id, main.cola FROM main', [(t[0], t[1]) for t in MAIN_DATA])
 

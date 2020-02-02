@@ -329,3 +329,4 @@ if __name__ == '__main__':
 
     print('Slice')
     print(list(tree[3:9]))
+    print(list(tree[3:9]))
