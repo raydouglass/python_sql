@@ -1,9 +1,9 @@
 import itertools
 import logging
 
-from data_structures.b_tree import BTree
-from data_structures.logic import *
-from data_structures.parser import parse
+from python_sql.b_tree import BTree
+from python_sql.logic import *
+from python_sql.parser import parse
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(message)s')
 logger = logging.getLogger(__name__)

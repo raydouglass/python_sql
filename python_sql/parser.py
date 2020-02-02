@@ -1,7 +1,7 @@
 import itertools
 import re
 
-from data_structures.logic import *
+from python_sql.logic import *
 
 ALPHANUMERIC = re.compile('[A-Za-z]')
 DIGIT = re.compile('[0-9]')

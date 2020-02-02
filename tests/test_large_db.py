@@ -1,5 +1,5 @@
 import unittest
-from data_structures.database import Database
+from python_sql.database import Database
 
 
 class TestLargeDatabase(unittest.TestCase):

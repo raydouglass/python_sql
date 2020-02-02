@@ -1,7 +1,7 @@
 import unittest
 
-from data_structures.database import Database
-from data_structures.logic import *
+from python_sql.database import Database
+from python_sql.logic import *
 
 MAIN_DATA = [
     (1, 10, 'a1'),
