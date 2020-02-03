@@ -2,7 +2,7 @@
 
 This is a naive implementation of an SQL database in pure Python with no external libraries.
 
-Currently, the database is in-memory only.
+I made this just to experiment with SQL and databases. It's not meant for production use.
 
 It's made of three components:
 * B+ Tree for indexes
